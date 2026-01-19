@@ -102,11 +102,14 @@ async function fetchWikipediaLogo(company: string): Promise<{ arrayBuffer: Array
 
     // For SVGs, get a PNG render at a good size
     if (imageUrl.endsWith('.svg')) {
-      // Convert to PNG render URL with specific width
-      const filename = fileTitle.replace('File:', '');
-      const hash = filename.replace(/ /g, '_');
-      const md5 = await getMd5Prefix(hash);
-      imageUrl = `https://upload.wikimedia.org/wikipedia/commons/thumb/${md5}/${encodeURIComponent(hash)}/800px-${encodeURIComponent(hash)}.png`;
+      // Extract the path from the original URL and construct thumbnail URL
+      // Original: https://upload.wikimedia.org/wikipedia/commons/b/ba/TransUnion_logo.svg
+      // Thumbnail: https://upload.wikimedia.org/wikipedia/commons/thumb/b/ba/TransUnion_logo.svg/800px-TransUnion_logo.svg.png
+      const urlMatch = imageUrl.match(/\/wikipedia\/commons\/([a-f0-9])\/([a-f0-9]{2})\/(.+\.svg)$/i);
+      if (urlMatch) {
+        const [, hash1, hash2, filename] = urlMatch;
+        imageUrl = `https://upload.wikimedia.org/wikipedia/commons/thumb/${hash1}/${hash2}/${filename}/800px-${filename}.png`;
+      }
     }
 
     // Step 4: Fetch the actual image
@@ -146,22 +149,6 @@ async function fetchWikipediaLogo(company: string): Promise<{ arrayBuffer: Array
   }
 }
 
-// Simple hash calculation for Wikimedia URLs
-async function getMd5Prefix(filename: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(filename);
-  const hashBuffer = await crypto.subtle.digest('MD5', data).catch(() => null);
-
-  if (!hashBuffer) {
-    // Fallback: use first two chars of filename
-    const clean = filename.replace(/[^a-zA-Z0-9]/g, '');
-    return `${clean[0]?.toLowerCase() || 'a'}/${clean.slice(0, 2).toLowerCase() || 'aa'}`;
-  }
-
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  return `${hashHex[0]}/${hashHex.slice(0, 2)}`;
-}
 
 // Fallback to pageimages API (but filter out building photos)
 async function fetchWikipediaPageImage(wikiTitle: string): Promise<{ arrayBuffer: ArrayBuffer; contentType: string } | null> {
