@@ -78,64 +78,128 @@ const KNOWN_DOMAINS: Record<string, string> = {
   'digitalocean': 'digitalocean.com',
 };
 
+// Wikipedia article titles for companies (for fetching full wordmark logos)
+const WIKIPEDIA_TITLES: Record<string, string> = {
+  'apple': 'Apple_Inc.',
+  'google': 'Google',
+  'microsoft': 'Microsoft',
+  'amazon': 'Amazon_(company)',
+  'facebook': 'Facebook',
+  'meta': 'Meta_Platforms',
+  'netflix': 'Netflix',
+  'twitter': 'Twitter',
+  'x': 'X_(social_network)',
+  'instagram': 'Instagram',
+  'linkedin': 'LinkedIn',
+  'spotify': 'Spotify',
+  'uber': 'Uber',
+  'airbnb': 'Airbnb',
+  'nike': 'Nike,_Inc.',
+  'adidas': 'Adidas',
+  'coca-cola': 'Coca-Cola',
+  'cocacola': 'Coca-Cola',
+  'coke': 'Coca-Cola',
+  'pepsi': 'Pepsi',
+  'pepsico': 'PepsiCo',
+  'mcdonalds': 'McDonald%27s',
+  'mcdonald\'s': 'McDonald%27s',
+  'starbucks': 'Starbucks',
+  'walmart': 'Walmart',
+  'target': 'Target_Corporation',
+  'costco': 'Costco',
+  'tesla': 'Tesla,_Inc.',
+  'ford': 'Ford_Motor_Company',
+  'toyota': 'Toyota',
+  'honda': 'Honda',
+  'bmw': 'BMW',
+  'mercedes': 'Mercedes-Benz',
+  'mercedes-benz': 'Mercedes-Benz',
+  'disney': 'The_Walt_Disney_Company',
+  'hbo': 'HBO',
+  'youtube': 'YouTube',
+  'tiktok': 'TikTok',
+  'snapchat': 'Snapchat',
+  'reddit': 'Reddit',
+  'twitch': 'Twitch_(service)',
+  'slack': 'Slack_(software)',
+  'zoom': 'Zoom_Video_Communications',
+  'dropbox': 'Dropbox',
+  'stripe': 'Stripe,_Inc.',
+  'paypal': 'PayPal',
+  'shopify': 'Shopify',
+  'salesforce': 'Salesforce',
+  'oracle': 'Oracle_Corporation',
+  'ibm': 'IBM',
+  'intel': 'Intel',
+  'amd': 'AMD',
+  'nvidia': 'Nvidia',
+  'samsung': 'Samsung',
+  'sony': 'Sony',
+  'lg': 'LG_Corporation',
+  'dell': 'Dell',
+  'hp': 'HP_Inc.',
+  'lenovo': 'Lenovo',
+  'cisco': 'Cisco',
+  'adobe': 'Adobe_Inc.',
+  'atlassian': 'Atlassian',
+  'github': 'GitHub',
+  'gitlab': 'GitLab',
+  'notion': 'Notion_(productivity_software)',
+  'figma': 'Figma',
+  'canva': 'Canva',
+  'openai': 'OpenAI',
+  'anthropic': 'Anthropic',
+  'vercel': 'Vercel',
+  'digitalocean': 'DigitalOcean',
+};
+
 export function companyToDomain(company: string): string {
   const normalized = company.toLowerCase().trim();
 
-  // Check known domains first
   if (KNOWN_DOMAINS[normalized]) {
     return KNOWN_DOMAINS[normalized];
   }
 
-  // Check if it already looks like a domain
   if (normalized.includes('.')) {
     return normalized;
   }
 
-  // Convert company name to likely domain
   const cleaned = normalized
-    .replace(/[^a-z0-9\s-]/g, '')  // Remove special chars except spaces and hyphens
-    .replace(/\s+/g, '')            // Remove spaces
-    .replace(/-+/g, '');            // Remove hyphens
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '')
+    .replace(/-+/g, '');
 
   return `${cleaned}.com`;
+}
+
+export function companyToWikipediaTitle(company: string): string {
+  const normalized = company.toLowerCase().trim();
+
+  if (WIKIPEDIA_TITLES[normalized]) {
+    return WIKIPEDIA_TITLES[normalized];
+  }
+
+  // Convert company name to likely Wikipedia title format
+  return company
+    .trim()
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join('_');
 }
 
 export interface LogoSource {
   name: string;
   getUrl: (domain: string) => string;
-  minSize?: number; // Minimum file size in bytes to be considered a valid logo
+  minSize?: number;
 }
 
-// Logo sources that provide FULL LOGOS (not just favicons/icons)
-export const LOGO_SOURCES: LogoSource[] = [
+// Fallback sources (icons) - only used if Wikipedia doesn't have a logo
+export const ICON_SOURCES: LogoSource[] = [
   {
-    // Logo.dev - high quality logos, no API key needed for basic usage
-    name: 'Logo.dev',
-    getUrl: (domain) => `https://img.logo.dev/${domain}?token=pk_X-1ZO13GSgeOoUrIuJ6GMQ`,
-    minSize: 1000, // Full logos should be at least 1KB
-  },
-  {
-    // Clearbit Logo API - provides full company logos
     name: 'Clearbit',
     getUrl: (domain) => `https://logo.clearbit.com/${domain}`,
-    minSize: 1000,
+    minSize: 500,
   },
-  {
-    // Brandfetch CDN - public endpoint for logos
-    name: 'Brandfetch',
-    getUrl: (domain) => `https://cdn.brandfetch.io/${domain}/w/512/h/512?c=1id_4fgnxR50000e`,
-    minSize: 1000,
-  },
-  {
-    // Uplead - another logo API
-    name: 'Uplead',
-    getUrl: (domain) => `https://logo.uplead.com/${domain}`,
-    minSize: 1000,
-  },
-];
-
-// Fallback sources (these return icons/favicons - only use if no full logo found)
-export const FALLBACK_SOURCES: LogoSource[] = [
   {
     name: 'Google Favicon (HD)',
     getUrl: (domain) => `https://www.google.com/s2/favicons?domain=${domain}&sz=256`,
