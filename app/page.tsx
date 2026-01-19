@@ -11,7 +11,7 @@ export default function Home() {
   const [logos, setLogos] = useState<LogoResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  const fetchLogo = async (company: string, index: number, sourceIndex = 0) => {
+  const fetchLogo = async (company: string, index: number, sourceIndex?: number) => {
     const domain = companyToDomain(company);
 
     // Update status to loading
@@ -20,7 +20,11 @@ export default function Home() {
     ));
 
     try {
-      const response = await fetch(`/api/fetch-logo?company=${encodeURIComponent(company)}&source=${sourceIndex}`);
+      // Only pass source parameter if explicitly specified (for retry)
+      const url = sourceIndex !== undefined
+        ? `/api/fetch-logo?company=${encodeURIComponent(company)}&source=${sourceIndex}`
+        : `/api/fetch-logo?company=${encodeURIComponent(company)}`;
+      const response = await fetch(url);
 
       if (response.ok) {
         const blob = await response.blob();
