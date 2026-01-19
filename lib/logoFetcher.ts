@@ -194,20 +194,11 @@ export interface LogoSource {
 }
 
 // Fallback sources (icons) - only used if Wikipedia doesn't have a logo
+// Only using Clearbit as it provides actual logos, not tiny favicons
 export const ICON_SOURCES: LogoSource[] = [
   {
     name: 'Clearbit',
     getUrl: (domain) => `https://logo.clearbit.com/${domain}`,
-    minSize: 500,
-  },
-  {
-    name: 'Google Favicon (HD)',
-    getUrl: (domain) => `https://www.google.com/s2/favicons?domain=${domain}&sz=256`,
-    minSize: 100,
-  },
-  {
-    name: 'DuckDuckGo',
-    getUrl: (domain) => `https://icons.duckduckgo.com/ip3/${domain}.ico`,
-    minSize: 100,
+    minSize: 3000, // Require at least 3KB for decent quality
   },
 ];

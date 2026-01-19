@@ -216,6 +216,35 @@ async function fetchWikipediaPageImage(wikiTitle: string): Promise<{ arrayBuffer
   }
 }
 
+// Check if a domain actually exists and returns a valid response
+async function checkDomainExists(domain: string): Promise<boolean> {
+  try {
+    const response = await fetch(`https://${domain}`, {
+      method: 'HEAD',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+      },
+      redirect: 'follow',
+    });
+    // Accept 2xx and 3xx status codes
+    return response.status >= 200 && response.status < 400;
+  } catch {
+    // Try http as fallback
+    try {
+      const response = await fetch(`http://${domain}`, {
+        method: 'HEAD',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        },
+        redirect: 'follow',
+      });
+      return response.status >= 200 && response.status < 400;
+    } catch {
+      return false;
+    }
+  }
+}
+
 async function tryFetchIcon(source: LogoSource, domain: string): Promise<{ arrayBuffer: ArrayBuffer; contentType: string } | null> {
   try {
     const logoUrl = source.getUrl(domain);
@@ -236,7 +265,9 @@ async function tryFetchIcon(source: LogoSource, domain: string): Promise<{ array
     }
 
     const arrayBuffer = await response.arrayBuffer();
-    const minSize = source.minSize || 100;
+
+    // Require larger minimum size for icon sources to avoid blurry images
+    const minSize = source.minSize || 2000; // At least 2KB for decent quality
     if (arrayBuffer.byteLength < minSize) {
       return null;
     }
@@ -275,19 +306,24 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Fall back to icon sources
-  for (const source of ICON_SOURCES) {
-    const result = await tryFetchIcon(source, domain);
-    if (result) {
-      return new Response(result.arrayBuffer, {
-        headers: {
-          'Content-Type': result.contentType,
-          'Cache-Control': 'public, max-age=86400',
-          'X-Logo-Source': source.name,
-          'X-Logo-Domain': domain,
-          'X-Logo-Type': 'icon',
-        },
-      });
+  // Check if domain exists before trying icon sources (avoids garbage results)
+  const domainExists = await checkDomainExists(domain);
+
+  if (domainExists) {
+    // Fall back to icon sources only if domain exists
+    for (const source of ICON_SOURCES) {
+      const result = await tryFetchIcon(source, domain);
+      if (result) {
+        return new Response(result.arrayBuffer, {
+          headers: {
+            'Content-Type': result.contentType,
+            'Cache-Control': 'public, max-age=86400',
+            'X-Logo-Source': source.name,
+            'X-Logo-Domain': domain,
+            'X-Logo-Type': 'icon',
+          },
+        });
+      }
     }
   }
 
@@ -296,6 +332,7 @@ export async function GET(request: NextRequest) {
       error: 'Logo not found',
       domain,
       company,
+      domainExists,
     },
     { status: 404 }
   );
