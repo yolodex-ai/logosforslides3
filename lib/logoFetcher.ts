@@ -103,19 +103,47 @@ export function companyToDomain(company: string): string {
 export interface LogoSource {
   name: string;
   getUrl: (domain: string) => string;
+  minSize?: number; // Minimum file size in bytes to be considered a valid logo
 }
 
+// Logo sources that provide FULL LOGOS (not just favicons/icons)
 export const LOGO_SOURCES: LogoSource[] = [
   {
-    name: 'Clearbit',
-    getUrl: (domain) => `https://logo.clearbit.com/${domain}`,
+    // Logo.dev - high quality logos, no API key needed for basic usage
+    name: 'Logo.dev',
+    getUrl: (domain) => `https://img.logo.dev/${domain}?token=pk_X-1ZO13GSgeOoUrIuJ6GMQ`,
+    minSize: 1000, // Full logos should be at least 1KB
   },
   {
-    name: 'Google Favicon',
-    getUrl: (domain) => `https://www.google.com/s2/favicons?domain=${domain}&sz=128`,
+    // Clearbit Logo API - provides full company logos
+    name: 'Clearbit',
+    getUrl: (domain) => `https://logo.clearbit.com/${domain}`,
+    minSize: 1000,
+  },
+  {
+    // Brandfetch CDN - public endpoint for logos
+    name: 'Brandfetch',
+    getUrl: (domain) => `https://cdn.brandfetch.io/${domain}/w/512/h/512?c=1id_4fgnxR50000e`,
+    minSize: 1000,
+  },
+  {
+    // Uplead - another logo API
+    name: 'Uplead',
+    getUrl: (domain) => `https://logo.uplead.com/${domain}`,
+    minSize: 1000,
+  },
+];
+
+// Fallback sources (these return icons/favicons - only use if no full logo found)
+export const FALLBACK_SOURCES: LogoSource[] = [
+  {
+    name: 'Google Favicon (HD)',
+    getUrl: (domain) => `https://www.google.com/s2/favicons?domain=${domain}&sz=256`,
+    minSize: 100,
   },
   {
     name: 'DuckDuckGo',
     getUrl: (domain) => `https://icons.duckduckgo.com/ip3/${domain}.ico`,
+    minSize: 100,
   },
 ];

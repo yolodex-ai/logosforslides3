@@ -1,9 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { companyToDomain, LOGO_SOURCES } from '@/lib/logoFetcher';
+import { companyToDomain, LOGO_SOURCES, FALLBACK_SOURCES, LogoSource } from '@/lib/logoFetcher';
+
+async function tryFetchLogo(source: LogoSource, domain: string): Promise<{ arrayBuffer: ArrayBuffer; contentType: string; size: number } | null> {
+  try {
+    const logoUrl = source.getUrl(domain);
+    const response = await fetch(logoUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'image/*',
+      },
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const contentType = response.headers.get('content-type');
+
+    // Check if it's actually an image
+    if (!contentType || !contentType.startsWith('image/')) {
+      return null;
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+
+    // Check minimum size to filter out tiny icons/placeholders
+    const minSize = source.minSize || 100;
+    if (arrayBuffer.byteLength < minSize) {
+      return null;
+    }
+
+    return { arrayBuffer, contentType, size: arrayBuffer.byteLength };
+  } catch (error) {
+    console.error(`Error fetching from ${source.name}:`, error);
+    return null;
+  }
+}
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const company = searchParams.get('company');
+  const includeFallback = searchParams.get('fallback') !== 'false';
 
   if (!company) {
     return NextResponse.json({ error: 'Company parameter required' }, { status: 400 });
@@ -11,40 +48,37 @@ export async function GET(request: NextRequest) {
 
   const domain = companyToDomain(company);
 
-  // Try each logo source until we find one that works
+  // First, try all primary logo sources (these provide full logos)
   for (const source of LOGO_SOURCES) {
-    try {
-      const logoUrl = source.getUrl(domain);
-      const response = await fetch(logoUrl, {
+    const result = await tryFetchLogo(source, domain);
+    if (result) {
+      return new Response(result.arrayBuffer, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; LogoFetcher/1.0)',
+          'Content-Type': result.contentType,
+          'Cache-Control': 'public, max-age=86400',
+          'X-Logo-Source': source.name,
+          'X-Logo-Domain': domain,
+          'X-Logo-Type': 'full',
         },
       });
+    }
+  }
 
-      if (response.ok) {
-        const contentType = response.headers.get('content-type');
-
-        // Check if it's actually an image
-        if (contentType && contentType.startsWith('image/')) {
-          const arrayBuffer = await response.arrayBuffer();
-          const buffer = Buffer.from(arrayBuffer);
-
-          // Check if the image has reasonable size (not a tiny placeholder)
-          if (buffer.length > 100) {
-            return new NextResponse(buffer, {
-              headers: {
-                'Content-Type': contentType,
-                'Cache-Control': 'public, max-age=86400',
-                'X-Logo-Source': source.name,
-                'X-Logo-Domain': domain,
-              },
-            });
-          }
-        }
+  // If no full logo found and fallback is enabled, try fallback sources (icons/favicons)
+  if (includeFallback) {
+    for (const source of FALLBACK_SOURCES) {
+      const result = await tryFetchLogo(source, domain);
+      if (result) {
+        return new Response(result.arrayBuffer, {
+          headers: {
+            'Content-Type': result.contentType,
+            'Cache-Control': 'public, max-age=86400',
+            'X-Logo-Source': source.name,
+            'X-Logo-Domain': domain,
+            'X-Logo-Type': 'icon',
+          },
+        });
       }
-    } catch (error) {
-      console.error(`Error fetching from ${source.name}:`, error);
-      // Continue to next source
     }
   }
 
@@ -53,7 +87,7 @@ export async function GET(request: NextRequest) {
     {
       error: 'Logo not found',
       domain,
-      triedSources: LOGO_SOURCES.map(s => s.name),
+      triedSources: [...LOGO_SOURCES, ...(includeFallback ? FALLBACK_SOURCES : [])].map(s => s.name),
     },
     { status: 404 }
   );
@@ -71,28 +105,31 @@ export async function POST(request: NextRequest) {
       companies.map(async (company: string) => {
         const domain = companyToDomain(company);
 
+        // Try primary sources first
         for (const source of LOGO_SOURCES) {
-          try {
-            const logoUrl = source.getUrl(domain);
-            const response = await fetch(logoUrl, {
-              headers: {
-                'User-Agent': 'Mozilla/5.0 (compatible; LogoFetcher/1.0)',
-              },
-            });
+          const result = await tryFetchLogo(source, domain);
+          if (result) {
+            return {
+              company,
+              domain,
+              success: true,
+              source: source.name,
+              type: 'full',
+            };
+          }
+        }
 
-            if (response.ok) {
-              const contentType = response.headers.get('content-type');
-              if (contentType && contentType.startsWith('image/')) {
-                return {
-                  company,
-                  domain,
-                  success: true,
-                  source: source.name,
-                };
-              }
-            }
-          } catch {
-            // Continue to next source
+        // Try fallback sources
+        for (const source of FALLBACK_SOURCES) {
+          const result = await tryFetchLogo(source, domain);
+          if (result) {
+            return {
+              company,
+              domain,
+              success: true,
+              source: source.name,
+              type: 'icon',
+            };
           }
         }
 
