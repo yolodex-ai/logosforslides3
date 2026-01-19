@@ -1,14 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { companyToDomain, companyToWikipediaTitle, ICON_SOURCES, LogoSource } from '@/lib/logoFetcher';
 
-interface WikipediaResponse {
+interface WikipediaImagesResponse {
   query?: {
     pages?: {
       [key: string]: {
-        thumbnail?: {
-          source: string;
-        };
-        pageimage?: string;
+        images?: Array<{
+          title: string;
+        }>;
+      };
+    };
+  };
+}
+
+interface WikimediaImageInfoResponse {
+  query?: {
+    pages?: {
+      [key: string]: {
+        imageinfo?: Array<{
+          url: string;
+          mime: string;
+        }>;
       };
     };
   };
@@ -18,12 +30,147 @@ async function fetchWikipediaLogo(company: string): Promise<{ arrayBuffer: Array
   try {
     const wikiTitle = companyToWikipediaTitle(company);
 
-    // First, get the page image info from Wikipedia API
-    const apiUrl = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(wikiTitle)}&prop=pageimages&format=json&pithumbsize=800&origin=*`;
+    // Step 1: Get all images from the Wikipedia article
+    const imagesApiUrl = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(wikiTitle)}&prop=images&format=json&origin=*`;
+
+    const imagesResponse = await fetch(imagesApiUrl, {
+      headers: {
+        'User-Agent': 'LogoFinder/1.0 (https://logosforslides.com; contact@example.com)',
+      },
+    });
+
+    if (!imagesResponse.ok) {
+      return null;
+    }
+
+    const imagesData: WikipediaImagesResponse = await imagesResponse.json();
+
+    if (!imagesData.query?.pages) {
+      return null;
+    }
+
+    const pages = Object.values(imagesData.query.pages);
+    const page = pages[0];
+
+    if (!page?.images || page.images.length === 0) {
+      return null;
+    }
+
+    // Step 2: Find a logo file - prioritize files with "logo" in the name
+    const logoFile = page.images.find(img => {
+      const title = img.title.toLowerCase();
+      return title.includes('logo') &&
+             !title.includes('commons-logo') &&
+             !title.includes('wiki') &&
+             (title.endsWith('.svg') || title.endsWith('.png') || title.endsWith('.jpg'));
+    });
+
+    if (!logoFile) {
+      // No logo file found, fall back to pageimages API but be more careful
+      return await fetchWikipediaPageImage(wikiTitle);
+    }
+
+    // Step 3: Get the actual image URL from Wikimedia Commons
+    const fileTitle = logoFile.title;
+    const imageInfoUrl = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(fileTitle)}&prop=imageinfo&iiprop=url|mime&format=json&origin=*`;
+
+    const imageInfoResponse = await fetch(imageInfoUrl, {
+      headers: {
+        'User-Agent': 'LogoFinder/1.0 (https://logosforslides.com)',
+      },
+    });
+
+    if (!imageInfoResponse.ok) {
+      return null;
+    }
+
+    const imageInfoData: WikimediaImageInfoResponse = await imageInfoResponse.json();
+
+    if (!imageInfoData.query?.pages) {
+      return null;
+    }
+
+    const imagePages = Object.values(imageInfoData.query.pages);
+    const imagePage = imagePages[0];
+
+    if (!imagePage?.imageinfo || imagePage.imageinfo.length === 0) {
+      return null;
+    }
+
+    const imageInfo = imagePage.imageinfo[0];
+    let imageUrl = imageInfo.url;
+
+    // For SVGs, get a PNG render at a good size
+    if (imageUrl.endsWith('.svg')) {
+      // Convert to PNG render URL with specific width
+      const filename = fileTitle.replace('File:', '');
+      const hash = filename.replace(/ /g, '_');
+      const md5 = await getMd5Prefix(hash);
+      imageUrl = `https://upload.wikimedia.org/wikipedia/commons/thumb/${md5}/${encodeURIComponent(hash)}/800px-${encodeURIComponent(hash)}.png`;
+    }
+
+    // Step 4: Fetch the actual image
+    const imageResponse = await fetch(imageUrl, {
+      headers: {
+        'User-Agent': 'LogoFinder/1.0 (https://logosforslides.com)',
+      },
+    });
+
+    if (!imageResponse.ok) {
+      // Try without the thumbnail path for SVGs
+      if (imageInfo.url.endsWith('.svg')) {
+        const directResponse = await fetch(imageInfo.url, {
+          headers: {
+            'User-Agent': 'LogoFinder/1.0 (https://logosforslides.com)',
+          },
+        });
+        if (directResponse.ok) {
+          const arrayBuffer = await directResponse.arrayBuffer();
+          return { arrayBuffer, contentType: 'image/svg+xml' };
+        }
+      }
+      return null;
+    }
+
+    const contentType = imageResponse.headers.get('content-type') || 'image/png';
+    const arrayBuffer = await imageResponse.arrayBuffer();
+
+    if (arrayBuffer.byteLength < 500) {
+      return null;
+    }
+
+    return { arrayBuffer, contentType };
+  } catch (error) {
+    console.error('Error fetching Wikipedia logo:', error);
+    return null;
+  }
+}
+
+// Simple hash calculation for Wikimedia URLs
+async function getMd5Prefix(filename: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(filename);
+  const hashBuffer = await crypto.subtle.digest('MD5', data).catch(() => null);
+
+  if (!hashBuffer) {
+    // Fallback: use first two chars of filename
+    const clean = filename.replace(/[^a-zA-Z0-9]/g, '');
+    return `${clean[0]?.toLowerCase() || 'a'}/${clean.slice(0, 2).toLowerCase() || 'aa'}`;
+  }
+
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return `${hashHex[0]}/${hashHex.slice(0, 2)}`;
+}
+
+// Fallback to pageimages API (but filter out building photos)
+async function fetchWikipediaPageImage(wikiTitle: string): Promise<{ arrayBuffer: ArrayBuffer; contentType: string } | null> {
+  try {
+    const apiUrl = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(wikiTitle)}&prop=pageimages&format=json&pithumbsize=800&piprop=thumbnail|name&origin=*`;
 
     const response = await fetch(apiUrl, {
       headers: {
-        'User-Agent': 'LogoFinder/1.0 (https://logosforslides.com; contact@example.com)',
+        'User-Agent': 'LogoFinder/1.0 (https://logosforslides.com)',
       },
     });
 
@@ -31,23 +178,30 @@ async function fetchWikipediaLogo(company: string): Promise<{ arrayBuffer: Array
       return null;
     }
 
-    const data: WikipediaResponse = await response.json();
+    const data = await response.json();
 
     if (!data.query?.pages) {
       return null;
     }
 
-    // Get the first page result
-    const pages = Object.values(data.query.pages);
+    const pages = Object.values(data.query.pages) as Array<{ thumbnail?: { source: string }; pageimage?: string }>;
     const page = pages[0];
 
-    if (!page?.thumbnail?.source) {
+    if (!page?.thumbnail?.source || !page?.pageimage) {
       return null;
     }
 
-    // Fetch the actual image
-    const imageUrl = page.thumbnail.source;
-    const imageResponse = await fetch(imageUrl, {
+    // Skip if it looks like a building/headquarters photo
+    const imageName = page.pageimage.toLowerCase();
+    if (imageName.includes('hq') ||
+        imageName.includes('headquarters') ||
+        imageName.includes('building') ||
+        imageName.includes('office') ||
+        imageName.includes('campus')) {
+      return null;
+    }
+
+    const imageResponse = await fetch(page.thumbnail.source, {
       headers: {
         'User-Agent': 'LogoFinder/1.0 (https://logosforslides.com)',
       },
@@ -64,14 +218,13 @@ async function fetchWikipediaLogo(company: string): Promise<{ arrayBuffer: Array
 
     const arrayBuffer = await imageResponse.arrayBuffer();
 
-    // Minimum size check - Wikipedia logos should be substantial
     if (arrayBuffer.byteLength < 1000) {
       return null;
     }
 
     return { arrayBuffer, contentType };
   } catch (error) {
-    console.error('Error fetching Wikipedia logo:', error);
+    console.error('Error fetching Wikipedia page image:', error);
     return null;
   }
 }
@@ -173,7 +326,6 @@ export async function POST(request: NextRequest) {
       companies.map(async (company: string) => {
         const domain = companyToDomain(company);
 
-        // Try Wikipedia first
         const wikiResult = await fetchWikipediaLogo(company);
         if (wikiResult) {
           return {
@@ -185,7 +337,6 @@ export async function POST(request: NextRequest) {
           };
         }
 
-        // Try icon sources
         for (const source of ICON_SOURCES) {
           const result = await tryFetchIcon(source, domain);
           if (result) {
