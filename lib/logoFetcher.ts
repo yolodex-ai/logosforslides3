@@ -154,6 +154,34 @@ const WIKIPEDIA_TITLES: Record<string, string> = {
   'anthropic': 'Anthropic',
   'vercel': 'Vercel',
   'digitalocean': 'DigitalOcean',
+  // Retail & Consumer
+  'tesco': 'Tesco',
+  'ikea': 'IKEA',
+  'tiffany': 'Tiffany_%26_Co.',
+  'rolex': 'Rolex',
+  'gucci': 'Gucci',
+  'prada': 'Prada',
+  'lvmh': 'LVMH',
+  'hermes': 'Hermès',
+  'burberry': 'Burberry',
+  'zara': 'Zara',
+  'h&m': 'H%26M',
+  'uniqlo': 'Uniqlo',
+  // Consulting
+  'mckinsey': 'McKinsey_%26_Company',
+  'bcg': 'Boston_Consulting_Group',
+  'bain': 'Bain_%26_Company',
+  'deloitte': 'Deloitte',
+  'pwc': 'PricewaterhouseCoopers',
+  'ey': 'Ernst_%26_Young',
+  'kpmg': 'KPMG',
+  'accenture': 'Accenture',
+  'roland berger': 'Roland_Berger',
+  // Tech
+  'perplexity': 'Perplexity_AI',
+  'perplexity ai': 'Perplexity_AI',
+  'mistral': 'Mistral_AI',
+  'cohere': 'Cohere',
 };
 
 export function companyToDomain(company: string): string {
@@ -196,12 +224,16 @@ export interface LogoSource {
   minSize?: number;
 }
 
-// Fallback sources (icons) - only used if Wikipedia doesn't have a logo
-// Only using Clearbit as it provides actual logos, not tiny favicons
+// Fallback sources - used if Wikipedia doesn't have a logo
 export const ICON_SOURCES: LogoSource[] = [
   {
     name: 'Clearbit',
     getUrl: (domain) => `https://logo.clearbit.com/${domain}`,
-    minSize: 3000, // Require at least 3KB for decent quality
+    minSize: 2000, // Require at least 2KB for decent quality
+  },
+  {
+    name: 'Google Favicon HD',
+    getUrl: (domain) => `https://www.google.com/s2/favicons?domain=${domain}&sz=256`,
+    minSize: 5000, // Only accept if it's a substantial image (>5KB means likely a real logo)
   },
 ];

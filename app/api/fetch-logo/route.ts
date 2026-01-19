@@ -57,12 +57,30 @@ async function fetchWikipediaLogo(company: string): Promise<{ arrayBuffer: Array
     }
 
     // Step 2: Find a logo file - prioritize files with "logo" in the name
+    // Also try to match company name in filename for better accuracy
+    const companyLower = company.toLowerCase().replace(/[^a-z0-9]/g, '');
+
     const logoFile = page.images.find(img => {
       const title = img.title.toLowerCase();
-      return title.includes('logo') &&
-             !title.includes('commons-logo') &&
-             !title.includes('wiki') &&
-             (title.endsWith('.svg') || title.endsWith('.png') || title.endsWith('.jpg'));
+      const titleClean = title.replace(/[^a-z0-9]/g, '');
+
+      // Must contain "logo" and be an image file
+      if (!title.includes('logo')) return false;
+      if (!(title.endsWith('.svg') || title.endsWith('.png') || title.endsWith('.jpg'))) return false;
+
+      // Exclude generic/unrelated logos
+      if (title.includes('commons-logo')) return false;
+      if (title.includes('wiki')) return false;
+      if (title.includes('foodlogo')) return false;
+      if (title.includes('icon')) return false;
+      if (title.includes('p-logo')) return false;
+      if (title.includes('symbol')) return false;
+
+      // Prefer files that contain the company name
+      if (titleClean.includes(companyLower)) return true;
+
+      // Accept other logo files as fallback
+      return true;
     });
 
     if (!logoFile) {
