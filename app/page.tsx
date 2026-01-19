@@ -11,7 +11,7 @@ export default function Home() {
   const [logos, setLogos] = useState<LogoResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  const fetchLogo = async (company: string, index: number) => {
+  const fetchLogo = async (company: string, index: number, sourceIndex = 0) => {
     const domain = companyToDomain(company);
 
     // Update status to loading
@@ -20,27 +20,37 @@ export default function Home() {
     ));
 
     try {
-      const response = await fetch(`/api/fetch-logo?company=${encodeURIComponent(company)}`);
+      const response = await fetch(`/api/fetch-logo?company=${encodeURIComponent(company)}&source=${sourceIndex}`);
 
       if (response.ok) {
         const blob = await response.blob();
         const logoUrl = URL.createObjectURL(blob);
+        const currentSourceIndex = parseInt(response.headers.get('X-Source-Index') || '0', 10);
 
         setLogos(prev => prev.map((l, i) =>
-          i === index ? { ...l, status: 'success' as const, logoUrl, blob } : l
+          i === index ? { ...l, status: 'success' as const, logoUrl, blob, sourceIndex: currentSourceIndex } : l
         ));
       } else {
         setLogos(prev => prev.map((l, i) =>
-          i === index ? { ...l, status: 'error' as const } : l
+          i === index ? { ...l, status: 'error' as const, sourceIndex } : l
         ));
       }
     } catch (error) {
       console.error(`Error fetching logo for ${company}:`, error);
       setLogos(prev => prev.map((l, i) =>
-        i === index ? { ...l, status: 'error' as const } : l
+        i === index ? { ...l, status: 'error' as const, sourceIndex } : l
       ));
     }
   };
+
+  const handleRetry = useCallback(async (index: number) => {
+    const logo = logos[index];
+    if (!logo) return;
+
+    // Try next source (cycle through 0, 1, 2, 0, 1, 2...)
+    const nextSourceIndex = ((logo.sourceIndex ?? 0) + 1) % 3;
+    await fetchLogo(logo.company, index, nextSourceIndex);
+  }, [logos]);
 
   const handleCompaniesSubmit = useCallback(async (companies: string[]) => {
     setIsLoading(true);
@@ -89,7 +99,7 @@ export default function Home() {
 
         <LogoInput onCompaniesSubmit={handleCompaniesSubmit} isLoading={isLoading} />
 
-        <LogoGrid logos={logos} onDownloadSingle={handleDownloadSingle} />
+        <LogoGrid logos={logos} onDownloadSingle={handleDownloadSingle} onRetry={handleRetry} />
 
         <DownloadButton logos={logos} />
 

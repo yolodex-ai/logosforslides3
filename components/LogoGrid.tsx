@@ -8,14 +8,16 @@ export interface LogoResult {
   logoUrl: string | null;
   status: 'pending' | 'loading' | 'success' | 'error';
   blob?: Blob;
+  sourceIndex?: number;
 }
 
 interface LogoGridProps {
   logos: LogoResult[];
   onDownloadSingle: (logo: LogoResult) => void;
+  onRetry: (index: number) => void;
 }
 
-export default function LogoGrid({ logos, onDownloadSingle }: LogoGridProps) {
+export default function LogoGrid({ logos, onDownloadSingle, onRetry }: LogoGridProps) {
   if (logos.length === 0) {
     return null;
   }
@@ -114,6 +116,17 @@ export default function LogoGrid({ logos, onDownloadSingle }: LogoGridProps) {
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                 </svg>
               </div>
+            )}
+
+            {/* Try Another button - shown for both success (wrong logo) and error */}
+            {(logo.status === 'success' || logo.status === 'error') && (
+              <button
+                onClick={() => onRetry(index)}
+                className="mt-2 w-full text-xs py-1 px-2 text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded transition-colors"
+                title="Try a different logo source"
+              >
+                ↻ Try Another
+              </button>
             )}
           </div>
         ))}
