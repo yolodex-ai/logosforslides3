@@ -84,8 +84,9 @@ async function fetchWikipediaLogo(company: string): Promise<{ arrayBuffer: Array
     });
 
     if (!logoFile) {
-      // No logo file found, fall back to pageimages API but be more careful
-      return await fetchWikipediaPageImage(wikiTitle);
+      // No logo file found - don't fall back to pageimages as it often returns photos
+      // Let the caller try icon sources instead
+      return null;
     }
 
     // Step 3: Get the actual image URL from Wikimedia Commons
