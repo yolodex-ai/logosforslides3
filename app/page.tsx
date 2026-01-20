@@ -51,8 +51,8 @@ export default function Home() {
     const logo = logos[index];
     if (!logo) return;
 
-    // Try next source (cycle through 0, 1, 2, 0, 1, 2...)
-    const nextSourceIndex = ((logo.sourceIndex ?? 0) + 1) % 3;
+    // Try next source (cycle through 0, 1, 2, 3, 4, 0, 1, 2...)
+    const nextSourceIndex = ((logo.sourceIndex ?? 0) + 1) % 5;
     await fetchLogo(logo.company, index, nextSourceIndex);
   }, [logos]);
 

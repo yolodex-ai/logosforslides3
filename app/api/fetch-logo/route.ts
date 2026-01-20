@@ -8,12 +8,20 @@ const LOGO_SOURCES = [
     getUrl: (domain: string) => `https://logo.clearbit.com/${domain}`,
   },
   {
+    name: 'Uplead',
+    getUrl: (domain: string) => `https://logo.uplead.com/${domain}`,
+  },
+  {
     name: 'Google Favicon',
     getUrl: (domain: string) => `https://www.google.com/s2/favicons?domain=${domain}&sz=256`,
   },
   {
     name: 'DuckDuckGo',
     getUrl: (domain: string) => `https://icons.duckduckgo.com/ip3/${domain}.ico`,
+  },
+  {
+    name: 'Favicon Kit',
+    getUrl: (domain: string) => `https://api.faviconkit.com/${domain}/256`,
   },
 ];
 
