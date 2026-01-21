@@ -117,25 +117,19 @@ async function fetchFromWikipedia(company: string): Promise<{ arrayBuffer: Array
     for (const title of titlesToTry) {
       // Get all images from the Wikipedia article
       const imagesUrl = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(title)}&prop=images&format=json&origin=*`;
-      console.log(`[Wikipedia] Trying title: ${title}, URL: ${imagesUrl}`);
       const imagesResponse = await fetch(imagesUrl, {
         headers: { 'User-Agent': 'LogoFinder/1.0' },
       });
 
-      if (!imagesResponse.ok) {
-        console.log(`[Wikipedia] Response not ok for ${title}`);
-        continue;
-      }
+      if (!imagesResponse.ok) continue;
       const imagesData = await imagesResponse.json();
 
-      const pages = Object.values(imagesData.query?.pages || {}) as Array<{ pageid?: number; images?: Array<{ title: string }> }>;
+      const pages = Object.values(imagesData.query?.pages || {}) as Array<{ images?: Array<{ title: string }> }>;
       const page = pages[0];
-      console.log(`[Wikipedia] Page for ${title}: pageid=${page?.pageid}, images=${page?.images?.length || 0}`);
       if (!page?.images) continue;
 
       // Find logo files - look for files containing company name or "logo"
       const companyLower = company.toLowerCase().replace(/[^a-z0-9]/g, '');
-      console.log(`[Wikipedia] Looking for logo with companyLower: ${companyLower}`);
       const logoFile = page.images.find((img: { title: string }) => {
         const imgTitle = img.title.toLowerCase();
         const titleClean = imgTitle.replace(/[^a-z0-9]/g, '');
@@ -147,21 +141,14 @@ async function fetchFromWikipedia(company: string): Promise<{ arrayBuffer: Array
         if (imgTitle.includes('commons-logo') || imgTitle.includes('flag_of') || imgTitle.includes('ojs_ui')) return false;
 
         // Prefer files with company name AND (logo or mark or wordmark)
-        const hasCompanyName = titleClean.includes(companyLower);
-        const hasLogoKeyword = imgTitle.includes('logo') || imgTitle.includes('mark') || imgTitle.includes('wordmark');
-        console.log(`[Wikipedia] Checking image: ${img.title}, hasCompanyName=${hasCompanyName}, hasLogoKeyword=${hasLogoKeyword}`);
-        if (hasCompanyName && hasLogoKeyword) {
+        if (titleClean.includes(companyLower) && (imgTitle.includes('logo') || imgTitle.includes('mark') || imgTitle.includes('wordmark'))) {
           return true;
         }
 
         return false;
       });
 
-      if (!logoFile) {
-        console.log(`[Wikipedia] No matching logo file found for ${title}`);
-        continue;
-      }
-      console.log(`[Wikipedia] Found logo file: ${logoFile.title}`);
+      if (!logoFile) continue;
 
       // Get the image URL
       const imageInfoUrl = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(logoFile.title)}&prop=imageinfo&iiprop=url&format=json&origin=*`;
@@ -275,16 +262,10 @@ async function fetchFromSource(sourceIndex: number, domain: string, company: str
 // Total number of sources (1 website + 1 wikipedia + N APIs)
 const TOTAL_SOURCES = 2 + LOGO_SOURCES.length;
 
-// API Version: 4 - Wikipedia title fix with &_Company
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const company = searchParams.get('company');
   const sourceIndexParam = searchParams.get('source'); // 0, 1, 2... to try specific source
-
-  // Debug: Return version if requested
-  if (company === '_version') {
-    return NextResponse.json({ version: 4, timestamp: new Date().toISOString() });
-  }
 
   if (!company) {
     return NextResponse.json({ error: 'Company parameter required' }, { status: 400 });
