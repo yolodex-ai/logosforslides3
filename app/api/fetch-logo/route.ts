@@ -95,6 +95,103 @@ async function fetchFromWebsite(domain: string): Promise<{ arrayBuffer: ArrayBuf
   }
 }
 
+// Fetch logo from Wikipedia by searching article images
+async function fetchFromWikipedia(company: string): Promise<{ arrayBuffer: ArrayBuffer; contentType: string; source: string } | null> {
+  try {
+    // Convert company name to Wikipedia title format
+    const wikiTitle = company.trim().split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('_');
+
+    // Also try with common suffixes
+    const titlesToTry = [
+      wikiTitle,
+      `${wikiTitle}_(company)`,
+      `${wikiTitle},_Inc.`,
+      wikiTitle.replace(/&/g, '%26'),
+      `${wikiTitle.replace(/&/g, '%26')}_Company`,
+    ];
+
+    for (const title of titlesToTry) {
+      // Get all images from the Wikipedia article
+      const imagesUrl = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(title)}&prop=images&format=json&origin=*`;
+      const imagesResponse = await fetch(imagesUrl, {
+        headers: { 'User-Agent': 'LogoFinder/1.0' },
+      });
+
+      if (!imagesResponse.ok) continue;
+      const imagesData = await imagesResponse.json();
+
+      const pages = Object.values(imagesData.query?.pages || {}) as Array<{ images?: Array<{ title: string }> }>;
+      const page = pages[0];
+      if (!page?.images) continue;
+
+      // Find logo files - look for files containing company name or "logo"
+      const companyLower = company.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const logoFile = page.images.find((img: { title: string }) => {
+        const title = img.title.toLowerCase();
+        const titleClean = title.replace(/[^a-z0-9]/g, '');
+
+        // Must be an image file
+        if (!(title.endsWith('.svg') || title.endsWith('.png') || title.endsWith('.jpg'))) return false;
+
+        // Skip generic Wikipedia files
+        if (title.includes('commons-logo') || title.includes('flag_of') || title.includes('ojs_ui')) return false;
+
+        // Prefer files with company name AND (logo or mark or wordmark)
+        if (titleClean.includes(companyLower) && (title.includes('logo') || title.includes('mark') || title.includes('wordmark'))) {
+          return true;
+        }
+
+        return false;
+      });
+
+      if (!logoFile) continue;
+
+      // Get the image URL
+      const imageInfoUrl = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(logoFile.title)}&prop=imageinfo&iiprop=url&format=json&origin=*`;
+      const imageInfoResponse = await fetch(imageInfoUrl, {
+        headers: { 'User-Agent': 'LogoFinder/1.0' },
+      });
+
+      if (!imageInfoResponse.ok) continue;
+      const imageInfoData = await imageInfoResponse.json();
+
+      const imagePages = Object.values(imageInfoData.query?.pages || {}) as Array<{ imageinfo?: Array<{ url: string }> }>;
+      const imagePage = imagePages[0];
+      if (!imagePage?.imageinfo?.[0]?.url) continue;
+
+      let imageUrl = imagePage.imageinfo[0].url;
+
+      // For SVGs, get a PNG thumbnail
+      if (imageUrl.endsWith('.svg')) {
+        const urlMatch = imageUrl.match(/\/wikipedia\/commons\/([a-f0-9])\/([a-f0-9]{2})\/(.+\.svg)$/i);
+        if (urlMatch) {
+          const [, hash1, hash2, filename] = urlMatch;
+          imageUrl = `https://upload.wikimedia.org/wikipedia/commons/thumb/${hash1}/${hash2}/${filename}/400px-${filename}.png`;
+        }
+      }
+
+      // Fetch the image
+      const imgResponse = await fetch(imageUrl, {
+        headers: { 'User-Agent': 'LogoFinder/1.0' },
+      });
+
+      if (!imgResponse.ok) continue;
+
+      const contentType = imgResponse.headers.get('content-type') || 'image/png';
+      const arrayBuffer = await imgResponse.arrayBuffer();
+
+      if (arrayBuffer.byteLength < 500) continue;
+
+      return { arrayBuffer, contentType, source: 'Wikipedia' };
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error fetching from Wikipedia:', error);
+    return null;
+  }
+}
+
 // Logo API sources as fallback
 const LOGO_SOURCES = [
   {
@@ -107,14 +204,19 @@ const LOGO_SOURCES = [
   },
 ];
 
-async function fetchFromSource(sourceIndex: number, domain: string): Promise<{ arrayBuffer: ArrayBuffer; contentType: string; source: string } | null> {
+async function fetchFromSource(sourceIndex: number, domain: string, company: string): Promise<{ arrayBuffer: ArrayBuffer; contentType: string; source: string } | null> {
   // Source 0 = Website scraping
   if (sourceIndex === 0) {
     return await fetchFromWebsite(domain);
   }
 
-  // Sources 1+ = Logo APIs
-  const apiIndex = sourceIndex - 1;
+  // Source 1 = Wikipedia
+  if (sourceIndex === 1) {
+    return await fetchFromWikipedia(company);
+  }
+
+  // Sources 2+ = Logo APIs
+  const apiIndex = sourceIndex - 2;
   if (apiIndex >= LOGO_SOURCES.length) {
     return null;
   }
@@ -153,8 +255,8 @@ async function fetchFromSource(sourceIndex: number, domain: string): Promise<{ a
   }
 }
 
-// Total number of sources (1 website + N APIs)
-const TOTAL_SOURCES = 1 + LOGO_SOURCES.length;
+// Total number of sources (1 website + 1 wikipedia + N APIs)
+const TOTAL_SOURCES = 2 + LOGO_SOURCES.length;
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -170,7 +272,7 @@ export async function GET(request: NextRequest) {
 
   // If specific source requested, try just that one
   if (sourceIndexParam !== null) {
-    const result = await fetchFromSource(sourceIndex, domain);
+    const result = await fetchFromSource(sourceIndex, domain, company);
     if (result) {
       return new Response(result.arrayBuffer, {
         headers: {
@@ -189,9 +291,9 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Try all sources in order (website first, then APIs)
+  // Try all sources in order (website first, then Wikipedia, then APIs)
   for (let i = 0; i < TOTAL_SOURCES; i++) {
-    const result = await fetchFromSource(i, domain);
+    const result = await fetchFromSource(i, domain, company);
     if (result) {
       return new Response(result.arrayBuffer, {
         headers: {

@@ -52,8 +52,8 @@ export default function Home() {
     if (!logo) return;
 
     // Try next source (cycle through available sources)
-    // Total sources = 3 (Website + Clearbit + Google Favicon)
-    const nextSourceIndex = ((logo.sourceIndex ?? 0) + 1) % 3;
+    // Total sources = 4 (Website + Wikipedia + Clearbit + Google Favicon)
+    const nextSourceIndex = ((logo.sourceIndex ?? 0) + 1) % 4;
     await fetchLogo(logo.company, index, nextSourceIndex);
   }, [logos]);
 
