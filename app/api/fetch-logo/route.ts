@@ -106,8 +106,12 @@ async function fetchFromWikipedia(company: string): Promise<{ arrayBuffer: Array
       wikiTitle,
       `${wikiTitle}_(company)`,
       `${wikiTitle},_Inc.`,
+      `${wikiTitle}_&_Company`,
+      `${wikiTitle}_%26_Company`,
       wikiTitle.replace(/&/g, '%26'),
       `${wikiTitle.replace(/&/g, '%26')}_Company`,
+      `${wikiTitle}_Corporation`,
+      `${wikiTitle}_Inc.`,
     ];
 
     for (const title of titlesToTry) {
