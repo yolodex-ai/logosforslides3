@@ -117,38 +117,51 @@ async function fetchFromWikipedia(company: string): Promise<{ arrayBuffer: Array
     for (const title of titlesToTry) {
       // Get all images from the Wikipedia article
       const imagesUrl = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(title)}&prop=images&format=json&origin=*`;
+      console.log(`[Wikipedia] Trying title: ${title}, URL: ${imagesUrl}`);
       const imagesResponse = await fetch(imagesUrl, {
         headers: { 'User-Agent': 'LogoFinder/1.0' },
       });
 
-      if (!imagesResponse.ok) continue;
+      if (!imagesResponse.ok) {
+        console.log(`[Wikipedia] Response not ok for ${title}`);
+        continue;
+      }
       const imagesData = await imagesResponse.json();
 
-      const pages = Object.values(imagesData.query?.pages || {}) as Array<{ images?: Array<{ title: string }> }>;
+      const pages = Object.values(imagesData.query?.pages || {}) as Array<{ pageid?: number; images?: Array<{ title: string }> }>;
       const page = pages[0];
+      console.log(`[Wikipedia] Page for ${title}: pageid=${page?.pageid}, images=${page?.images?.length || 0}`);
       if (!page?.images) continue;
 
       // Find logo files - look for files containing company name or "logo"
       const companyLower = company.toLowerCase().replace(/[^a-z0-9]/g, '');
+      console.log(`[Wikipedia] Looking for logo with companyLower: ${companyLower}`);
       const logoFile = page.images.find((img: { title: string }) => {
-        const title = img.title.toLowerCase();
-        const titleClean = title.replace(/[^a-z0-9]/g, '');
+        const imgTitle = img.title.toLowerCase();
+        const titleClean = imgTitle.replace(/[^a-z0-9]/g, '');
 
         // Must be an image file
-        if (!(title.endsWith('.svg') || title.endsWith('.png') || title.endsWith('.jpg'))) return false;
+        if (!(imgTitle.endsWith('.svg') || imgTitle.endsWith('.png') || imgTitle.endsWith('.jpg'))) return false;
 
         // Skip generic Wikipedia files
-        if (title.includes('commons-logo') || title.includes('flag_of') || title.includes('ojs_ui')) return false;
+        if (imgTitle.includes('commons-logo') || imgTitle.includes('flag_of') || imgTitle.includes('ojs_ui')) return false;
 
         // Prefer files with company name AND (logo or mark or wordmark)
-        if (titleClean.includes(companyLower) && (title.includes('logo') || title.includes('mark') || title.includes('wordmark'))) {
+        const hasCompanyName = titleClean.includes(companyLower);
+        const hasLogoKeyword = imgTitle.includes('logo') || imgTitle.includes('mark') || imgTitle.includes('wordmark');
+        console.log(`[Wikipedia] Checking image: ${img.title}, hasCompanyName=${hasCompanyName}, hasLogoKeyword=${hasLogoKeyword}`);
+        if (hasCompanyName && hasLogoKeyword) {
           return true;
         }
 
         return false;
       });
 
-      if (!logoFile) continue;
+      if (!logoFile) {
+        console.log(`[Wikipedia] No matching logo file found for ${title}`);
+        continue;
+      }
+      console.log(`[Wikipedia] Found logo file: ${logoFile.title}`);
 
       // Get the image URL
       const imageInfoUrl = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(logoFile.title)}&prop=imageinfo&iiprop=url&format=json&origin=*`;
