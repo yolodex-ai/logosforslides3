@@ -275,10 +275,16 @@ async function fetchFromSource(sourceIndex: number, domain: string, company: str
 // Total number of sources (1 website + 1 wikipedia + N APIs)
 const TOTAL_SOURCES = 2 + LOGO_SOURCES.length;
 
+// API Version: 4 - Wikipedia title fix with &_Company
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const company = searchParams.get('company');
   const sourceIndexParam = searchParams.get('source'); // 0, 1, 2... to try specific source
+
+  // Debug: Return version if requested
+  if (company === '_version') {
+    return NextResponse.json({ version: 4, timestamp: new Date().toISOString() });
+  }
 
   if (!company) {
     return NextResponse.json({ error: 'Company parameter required' }, { status: 400 });
